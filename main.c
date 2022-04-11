@@ -7,8 +7,13 @@
 
 int servers;
 int customers;
-int ticket = 1;
+int ticket = 0;
 int *buffer;  
+int id = 0;
+
+pthread_mutex_t customer_lock = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t customer_avail_cond = PTHREAD_COND_INITIALIZER;
+int customer_avail = 0;
  
 // +++++ pthread APIs: +++++ 
 // pthread_mutex_t  lock1 = PTHREAD_MUTEX_INITIALIZER; 
@@ -26,21 +31,54 @@ typedef struct lunch{
   int ticket;
 } lunch;
 
+typedef struct threadC{
+  int ticket;
+  int id;
+} threadC;
+
+typedef struct threadS{
+  int ticket;
+  int id;
+} threadS;
+
 void lunch_init(struct lunch * lunch)
 {
   lunch->customers = 0;
   lunch->servers = 0;
-  lunch->ticket = ticket;
+  lunch->ticket = 0;
 }
 
-void* lunch_wait_turn(struct lunch *lunch, int ticket)
+void* lunch_wait_turn(void * args)
 {
+
+  struct lunch *this_lunch = (struct lunch*) args;
+  //acquire lock
+  (*this_lunch).ticket++;
+  pthread_mutex_lock(&customer_lock);
+  //customer available
+  customer_avail = 1;
+  pthread_cond_signal(&customer_avail_cond);
+  pthread_mutex_unlock(&customer_lock);
+  return NULL;  
+}
+
+void* lunch_wait_customer(void* args)
+{
+  struct lunch *this_lunch = (struct lunch*) args;
+  
+  pthread_mutex_lock(&customer_lock);
+  while(customer_avail == 0)
+  {
+    pthread_cond_wait(&customer_avail_cond, &customer_lock);
+  }
+  pthread_mutex_unlock(&customer_lock);
+  printf("Ticket No: %d\n", (*this_lunch).ticket);
   return NULL;
 }
 
-void* lunch_wait_customer(struct lunch *lunch)
+int lunch_get_ticket(struct lunch * lunch)
 {
-  return NULL;
+  return lunch->ticket;
 }
 
  int main(int argc, char *argv[]) {
@@ -52,20 +90,31 @@ void* lunch_wait_customer(struct lunch *lunch)
     servers = atoi(argv[2]);
     buffer = (int *) malloc(servers * sizeof(int));
 
-    for (int i = 0; i < servers; i++)
-      buffer[i] = 1; // start: all servers are available
-
-
-    pthread_t p1;
-    pthread_t p2;
     struct lunch lunch;
     lunch_init(&lunch);
-    printf("%d \n", lunch.customers);
 
-    //pthread_create(&p1, NULL, lunch_wait_turn, NULL);
+    //printf("%d \n", lunch.customers);
+    //printf("%d, %d \n", customers, servers);
+    //int rc;
 
-    printf("%d, %d \n", customers, servers);
+    pthread_t pC;
+    pthread_t pS;
 
+    //create customer threads
+    
+    if(pthread_create(&pC, NULL,lunch_wait_turn, (void*)&lunch ) != 0)
+    {
+      perror("Error 1");
+    }
+    
+    if(pthread_create(&pC, NULL,lunch_wait_customer, (void*)&lunch  ) != 0)
+    {
+      perror("Error 2");
+    }
+    
+
+    pthread_exit(NULL);
+    
 
     return 0;
- }
+}
